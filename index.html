@@ -37,15 +37,6 @@
                     <i class="fa-solid fa-chevron-down text-[8px]"></i>
                 </div>
             </div>
-
-            <!-- Status Indicator -->
-            <div class="text-xs font-bold bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-100 flex items-center gap-2">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span id="ui-mode-label">Mode: Cloud AI</span>
-            </div>
             
             <!-- Settings Button -->
             <button id="openSettingsBtn" class="text-xs font-bold bg-slate-100 w-8 h-8 rounded-full border border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center justify-center text-slate-500" title="Settings">
@@ -128,7 +119,6 @@
         const translations = {
             id: {
                 engine: "Smart AI Engine",
-                modeLabel: "Mode: Cloud AI",
                 sidebarTitle: "Buat Jadwal Diet",
                 placeholder: "Contoh: Diet Keto untuk pemula, Rendah Karbo, atau Vegan hemat...",
                 btnText: "Dapatkan Panduan",
@@ -143,8 +133,7 @@
                 emptyTitle: "Siap Menyusun Jadwal",
                 emptyDesc: "Ketik jenis diet Anda di samping.",
                 dayLabel: "Hari",
-                localPlanName: "Rencana",
-                apiError: "Koneksi AI terputus. Menggunakan database lokal.",
+                apiError: "Koneksi AI gagal. Periksa API Key Anda atau coba lagi.",
                 modalTitle: "Pengaturan",
                 modalDesc: "Masukkan API Key Anda (Opsional). Kosongkan untuk menggunakan kuota bawaan.",
                 saveBtn: "Simpan Pengaturan",
@@ -152,7 +141,6 @@
             },
             en: {
                 engine: "Smart AI Engine",
-                modeLabel: "Mode: Cloud AI",
                 sidebarTitle: "Create Diet Plan",
                 placeholder: "Example: Keto for beginners, Low Carb, or budget Vegan...",
                 btnText: "Get Guide",
@@ -167,8 +155,7 @@
                 emptyTitle: "Ready to Plan",
                 emptyDesc: "Type your diet type on the side.",
                 dayLabel: "Day",
-                localPlanName: "Plan",
-                apiError: "AI connection failed. Using local database fallback.",
+                apiError: "AI connection failed. Please check your API Key or try again.",
                 modalTitle: "Settings",
                 modalDesc: "Enter your API Key (Optional). Leave empty to use default quota.",
                 saveBtn: "Save Settings",
@@ -185,7 +172,6 @@
         function updateUILanguage() {
             const t = translations[currentLang];
             document.getElementById('ui-engine-tag').innerText = t.engine;
-            document.getElementById('ui-mode-label').innerText = t.modeLabel;
             document.getElementById('ui-sidebar-title').innerText = t.sidebarTitle;
             document.getElementById('promptInput').placeholder = t.placeholder;
             document.getElementById('ui-btn-text').innerText = t.btnText;
@@ -218,25 +204,6 @@
             setTimeout(() => {
                 toast.classList.add('translate-y-32', 'opacity-0');
             }, 4000);
-        }
-
-        function generateLocalPlan(query) {
-            const q = query.toLowerCase();
-            let type = 'lowcarb';
-            if (q.includes('keto')) type = 'keto';
-            if (q.includes('vegan') || q.includes('sayur') || q.includes('vegetable')) type = 'vegan';
-
-            const db = foodDatabase[type];
-            const meals = [];
-            for (let i = 1; i <= 7; i++) {
-                meals.push({
-                    day: i,
-                    breakfast: db.breakfast[Math.floor(Math.random() * db.breakfast.length)],
-                    lunch: db.lunch[Math.floor(Math.random() * db.lunch.length)],
-                    dinner: db.dinner[Math.floor(Math.random() * db.dinner.length)]
-                });
-            }
-            return { planName: `${translations[currentLang].localPlanName} ${query}`, meals: meals };
         }
 
         async function fetchAIPlanWithBackoff(promptText, signal) {
@@ -323,9 +290,8 @@
             btnSpan.innerText = translations[currentLang].btnCancel;
             btnIcon.className = "fa-solid fa-xmark";
 
-            let plan;
             try {
-                plan = await fetchAIPlanWithBackoff(prompt, abortController.signal);
+                const plan = await fetchAIPlanWithBackoff(prompt, abortController.signal);
                 addToHistory(prompt, plan);
                 renderCalendar(plan);
             } catch (e) {
@@ -333,9 +299,6 @@
                     showToast(translations[currentLang].cancelled);
                 } else {
                     showToast(translations[currentLang].apiError);
-                    plan = generateLocalPlan(prompt);
-                    addToHistory(prompt, plan);
-                    renderCalendar(plan);
                 }
             } finally {
                 isGenerating = false;
