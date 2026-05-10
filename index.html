@@ -46,6 +46,11 @@
                 </span>
                 <span id="ui-mode-label">Mode: Cloud AI</span>
             </div>
+            
+            <!-- Settings Button -->
+            <button id="openSettingsBtn" class="text-xs font-bold bg-slate-100 w-8 h-8 rounded-full border border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center justify-center text-slate-500" title="Settings">
+                <i class="fa-solid fa-gear"></i>
+            </button>
         </div>
     </header>
 
@@ -78,7 +83,7 @@
             <div class="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-emerald-50 p-6 min-h-[500px]">
                 <div id="calendarHeader" class="hidden mb-6 flex justify-between items-center border-b pb-4">
                     <h2 id="planTitle" class="text-xl md:text-2xl font-black text-slate-800">Nama Rencana</h2>
-                    <span id="ui-days-tag" class="text-[10px] md:text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold uppercase whitespace-nowrap">30 Hari</span>
+                    <span id="ui-days-tag" class="text-[10px] md:text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold uppercase whitespace-nowrap">7 Hari</span>
                 </div>
                 
                 <div id="emptyState" class="h-96 flex flex-col items-center justify-center text-center">
@@ -93,6 +98,22 @@
             </div>
         </section>
     </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="ui-modal-title" class="font-black text-lg text-slate-800">Pengaturan</h3>
+                <button id="closeSettingsBtn" class="text-slate-400 hover:text-rose-500 transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <p id="ui-modal-desc" class="text-xs text-slate-500 mb-4">Masukkan API Key Anda (Opsional). Kosongkan untuk menggunakan kuota bawaan.</p>
+            <input type="password" id="apiKeyInput" placeholder="Gemini API Key..." 
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none mb-4 focus:border-emerald-400 focus:bg-white transition-colors">
+            <button id="saveSettingsBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors">
+                <span id="ui-save-btn">Simpan Pengaturan</span>
+            </button>
+        </div>
+    </div>
 
     <!-- Toast Notification (replaces alert) -->
     <div id="toast" class="fixed bottom-6 right-6 bg-rose-600 text-white px-6 py-4 rounded-2xl shadow-2xl transform translate-y-32 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
@@ -118,12 +139,16 @@
                 searchRecipe: "Cari resep",
                 historyTitle: "Riwayat Diet",
                 noHistory: "Belum ada riwayat.",
-                daysTag: "30 Hari",
+                daysTag: "7 Hari",
                 emptyTitle: "Siap Menyusun Jadwal",
                 emptyDesc: "Ketik jenis diet Anda di samping.",
                 dayLabel: "Hari",
                 localPlanName: "Rencana",
-                apiError: "Koneksi AI terputus. Menggunakan database lokal."
+                apiError: "Koneksi AI terputus. Menggunakan database lokal.",
+                modalTitle: "Pengaturan",
+                modalDesc: "Masukkan API Key Anda (Opsional). Kosongkan untuk menggunakan kuota bawaan.",
+                saveBtn: "Simpan Pengaturan",
+                saveToast: "Pengaturan disimpan!"
             },
             en: {
                 engine: "Smart AI Engine",
@@ -138,17 +163,22 @@
                 searchRecipe: "Search recipe",
                 historyTitle: "Diet History",
                 noHistory: "No history yet.",
-                daysTag: "30 Days",
+                daysTag: "7 Days",
                 emptyTitle: "Ready to Plan",
                 emptyDesc: "Type your diet type on the side.",
                 dayLabel: "Day",
                 localPlanName: "Plan",
-                apiError: "AI connection failed. Using local database fallback."
+                apiError: "AI connection failed. Using local database fallback.",
+                modalTitle: "Settings",
+                modalDesc: "Enter your API Key (Optional). Leave empty to use default quota.",
+                saveBtn: "Save Settings",
+                saveToast: "Settings saved!"
             }
         };
 
         let currentLang = localStorage.getItem('nutriguide_lang') || "id";
         let history = JSON.parse(localStorage.getItem('nutriguide_history')) || [];
+        let userApiKey = localStorage.getItem('nutriguide_key') || "";
         let isGenerating = false;
         let abortController = null;
 
@@ -164,12 +194,25 @@
             document.getElementById('ui-days-tag').innerText = t.daysTag;
             document.getElementById('ui-empty-title').innerText = t.emptyTitle;
             document.getElementById('ui-empty-desc').innerText = t.emptyDesc;
+            document.getElementById('ui-modal-title').innerText = t.modalTitle;
+            document.getElementById('ui-modal-desc').innerText = t.modalDesc;
+            document.getElementById('ui-save-btn').innerText = t.saveBtn;
             document.getElementById('langSelect').value = currentLang;
             renderHistory();
         }
 
-        function showToast(message) {
+        function showToast(message, isSuccess = false) {
             const toast = document.getElementById('toast');
+            const icon = toast.querySelector('i');
+            
+            if (isSuccess) {
+                toast.classList.replace('bg-rose-600', 'bg-emerald-600');
+                icon.className = "fa-solid fa-check-circle text-lg";
+            } else {
+                toast.classList.replace('bg-emerald-600', 'bg-rose-600');
+                icon.className = "fa-solid fa-triangle-exclamation text-lg";
+            }
+            
             document.getElementById('toastMessage').innerText = message;
             toast.classList.remove('translate-y-32', 'opacity-0');
             setTimeout(() => {
@@ -185,7 +228,7 @@
 
             const db = foodDatabase[type];
             const meals = [];
-            for (let i = 1; i <= 30; i++) {
+            for (let i = 1; i <= 7; i++) {
                 meals.push({
                     day: i,
                     breakfast: db.breakfast[Math.floor(Math.random() * db.breakfast.length)],
@@ -200,7 +243,7 @@
             const maxRetries = 5;
             const delays = [1000, 2000, 4000, 8000, 16000];
             
-            const promptStr = `Create a 30-day diet plan for the user's request: "${promptText}". Language: ${currentLang}. Make sure the meals are realistic, varied, and appropriate for the diet requested. Ensure exactly 30 days are generated.`;
+            const promptStr = `Create a 7-day diet plan for the user's request: "${promptText}". Language: ${currentLang}. Make sure the meals are realistic, varied, and appropriate for the diet requested. Ensure exactly 7 days are generated.`;
 
             // Enforcing strict JSON schema for 2.5-flash
             const schema = {
@@ -209,7 +252,7 @@
                     planName: { type: "STRING", description: "A catchy title for the diet plan" },
                     meals: {
                         type: "ARRAY",
-                        description: "An array containing exactly 30 daily meal plans",
+                        description: "An array containing exactly 7 daily meal plans",
                         items: {
                             type: "OBJECT",
                             properties: {
@@ -225,9 +268,11 @@
                 required: ["planName", "meals"]
             };
 
+            const activeKey = userApiKey || apiKey;
+
             for (let i = 0; i <= maxRetries; i++) {
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         signal: signal,
@@ -409,6 +454,23 @@
         });
 
         document.getElementById('generateBtn').addEventListener('click', handleGenerate);
+
+        // Modal Settings Logic
+        document.getElementById('openSettingsBtn').addEventListener('click', () => {
+            document.getElementById('apiKeyInput').value = userApiKey;
+            document.getElementById('settingsModal').classList.remove('hidden');
+        });
+
+        document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+            document.getElementById('settingsModal').classList.add('hidden');
+        });
+
+        document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+            userApiKey = document.getElementById('apiKeyInput').value.trim();
+            localStorage.setItem('nutriguide_key', userApiKey);
+            document.getElementById('settingsModal').classList.add('hidden');
+            showToast(translations[currentLang].saveToast, true);
+        });
 
         // Initial Setup
         updateUILanguage();
